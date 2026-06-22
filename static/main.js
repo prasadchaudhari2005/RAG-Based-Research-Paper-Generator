@@ -50,13 +50,13 @@ document.addEventListener('DOMContentLoaded', () => {
         item.addEventListener('click', (e) => {
             e.preventDefault();
             const targetTab = item.getAttribute('data-tab');
-            
+
             navItems.forEach(nav => nav.classList.remove('active'));
             tabPanels.forEach(panel => panel.classList.remove('active'));
 
             item.classList.add('active');
             document.getElementById(targetTab).classList.add('active');
-            
+
             headerTitle.textContent = item.querySelector('span').textContent;
 
             // Trigger specific actions when switching tabs
@@ -83,7 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (indexed) {
             statusDot.className = 'status-dot green';
             statusText.textContent = `${files.length} paper(s) loaded`;
-            
+
             // Populate Ingest tab corpus card
             corpusCard.style.display = 'block';
             indexedList.innerHTML = files.map(file => `
@@ -129,7 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         uploadZone.style.borderColor = 'rgba(255, 255, 255, 0.15)';
         uploadZone.style.backgroundColor = 'rgba(255, 255, 255, 0.01)';
-        
+
         handleFiles(e.dataTransfer.files);
     });
 
@@ -183,7 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: formData
             });
             const data = await res.json();
-            
+
             if (data.success) {
                 updateStatusUI(true, data.files);
                 selectedFiles = [];
@@ -202,7 +202,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ------------------ GENERATE REVIEW ------------------
     generateReviewBtn.addEventListener('click', async () => {
         if (!systemIndexed) return alert('Please upload and index papers first.');
-        
+
         showLoading('Synthesizing Literature Review with Groq...');
         try {
             const res = await fetch('/api/review', {
@@ -211,7 +211,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ model: modelSelect.value })
             });
             const data = await res.json();
-            
+
             if (data.review) {
                 reviewOutput.innerHTML = marked.parse(data.review);
             } else {
@@ -227,7 +227,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ------------------ GENERATE GAPS & IDEAS ------------------
     generateGapsBtn.addEventListener('click', async () => {
         if (!systemIndexed) return alert('Please upload and index papers first.');
-        
+
         showLoading('Extracting gaps and brainstorm ideas with Groq...');
         try {
             const res = await fetch('/api/gaps', {
@@ -236,10 +236,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ model: modelSelect.value })
             });
             const data = await res.json();
-            
+
             if (data.gaps) {
                 gapsOutput.innerHTML = marked.parse(data.gaps);
-                
+
                 // Add quick listeners if there are generated titles to generate paper
                 setupPaperSuggestions();
             } else {
@@ -272,7 +272,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ topic: topic })
             });
             const data = await res.json();
-            
+
             if (data.paper) {
                 paperOutputContainer.style.display = 'block';
                 paperOutput.innerHTML = marked.parse(data.paper);
@@ -297,7 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch('/api/images');
             const data = await res.json();
-            
+
             if (data && data.length > 0) {
                 figuresGrid.innerHTML = data.map(img => `
                     <div class="figure-card">
@@ -336,11 +336,11 @@ document.addEventListener('DOMContentLoaded', () => {
         // Render User Message
         appendMessage('user', question);
         chatInput.value = '';
-        
+
         // Render System Loader
         const loaderId = 'loader-' + Date.now();
         appendMessage('system', '<span class="typing-indicator">Searching index and composing answer...</span>', loaderId);
-        
+
         try {
             const res = await fetch('/api/ask', {
                 method: 'POST',
@@ -351,7 +351,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 })
             });
             const data = await res.json();
-            
+
             const loaderBubble = document.getElementById(loaderId);
             if (data.answer) {
                 loaderBubble.querySelector('.message-bubble').innerHTML = marked.parse(data.answer);
@@ -368,13 +368,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const msgDiv = document.createElement('div');
         msgDiv.className = `chat-message ${sender}`;
         if (id) msgDiv.id = id;
-        
+
         msgDiv.innerHTML = `
             <div class="message-bubble">
                 ${text}
             </div>
         `;
-        
+
         chatWindow.appendChild(msgDiv);
         chatWindow.scrollTop = chatWindow.scrollHeight;
     }
@@ -384,23 +384,23 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch('/api/metadata');
             const data = await res.json();
-            
+
             const keys = Object.keys(data);
             if (keys.length > 0) {
                 metadataDashboardContainer.innerHTML = keys.map(key => {
                     const meta = data[key];
                     const confidencePercent = Math.round((meta.confidence_score || 0) * 100);
-                    
+
                     // Format arrays into badges/list elements
                     const authors = (meta.authors || []).map(a => `<span class="badge author-badge">${a}</span>`).join(' ') || 'Unknown';
                     const keywords = (meta.keywords || []).map(k => `<span class="badge keyword-badge">${k}</span>`).join(' ');
-                    
+
                     const methodologies = (meta.methodologies || []).map(m => `<li>${m}</li>`).join('') || '<li>None identified</li>';
                     const datasets = (meta.datasets || []).map(d => `<li>${d}</li>`).join('') || '<li>None identified</li>';
                     const findings = (meta.key_findings || []).map(f => `<li>${f}</li>`).join('') || '<li>None identified</li>';
                     const limitations = (meta.limitations || []).map(l => `<li>${l}</li>`).join('') || '<li>None identified</li>';
                     const futureWork = (meta.future_work || []).map(fw => `<li>${fw}</li>`).join('') || '<li>None identified</li>';
-                    
+
                     return `
                         <div class="metadata-card card">
                             <div class="metadata-card-header">

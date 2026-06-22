@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,13 +8,15 @@
     <!-- Fonts & Icons -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <!-- CSS -->
     <link rel="stylesheet" href="/static/style.css">
     <!-- Markdown Parser -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
+
 <body>
     <div class="app-container">
         <!-- Sidebar Navigation -->
@@ -22,7 +25,7 @@
                 <div class="logo-icon"><i class="fa-solid fa-graduation-cap"></i></div>
                 <span class="logo-text">RAG<span>PaperGen</span></span>
             </div>
-            
+
             <nav class="nav-menu">
                 <a href="#" class="nav-item active" data-tab="upload-tab">
                     <i class="fa-solid fa-cloud-arrow-up"></i><span>Ingest Corpus</span>
@@ -80,11 +83,12 @@
                             <p>or click to browse files</p>
                             <input type="file" id="file-input" multiple accept=".pdf" style="display: none;">
                         </div>
-                        
+
                         <div class="file-list-container" id="file-list-container" style="display: none;">
                             <h3>Selected Files</h3>
                             <ul class="file-list" id="file-list"></ul>
-                            <button id="upload-btn" class="btn primary-btn"><i class="fa-solid fa-server"></i> Build RAG Index</button>
+                            <button id="upload-btn" class="btn primary-btn"><i class="fa-solid fa-server"></i> Build RAG
+                                Index</button>
                         </div>
                     </div>
 
@@ -100,17 +104,20 @@
                 <!-- REVIEW TAB -->
                 <section id="review-tab" class="tab-panel">
                     <div class="action-bar">
-                        <button id="generate-review-btn" class="btn primary-btn"><i class="fa-solid fa-wand-magic-sparkles"></i> Generate Literature Review</button>
+                        <button id="generate-review-btn" class="btn primary-btn"><i
+                                class="fa-solid fa-wand-magic-sparkles"></i> Generate Literature Review</button>
                     </div>
                     <div class="card output-card">
                         <div class="card-header">
                             <h2>Unified Literature Review</h2>
-                            <p>An abstractive summary covering problem statements, methodologies, datasets, and performance metrics across the entire corpus.</p>
+                            <p>An abstractive summary covering problem statements, methodologies, datasets, and
+                                performance metrics across the entire corpus.</p>
                         </div>
                         <div class="markdown-body" id="review-output">
                             <div class="empty-state">
                                 <i class="fa-solid fa-file-lines"></i>
-                                <p>Click the button above to generate a unified literature review using your indexed documents.</p>
+                                <p>Click the button above to generate a unified literature review using your indexed
+                                    documents.</p>
                             </div>
                         </div>
                     </div>
@@ -119,17 +126,20 @@
                 <!-- GAPS TAB -->
                 <section id="gaps-tab" class="tab-panel">
                     <div class="action-bar">
-                        <button id="generate-gaps-btn" class="btn primary-btn"><i class="fa-solid fa-brain"></i> Analyze Research Gaps & Ideas</button>
+                        <button id="generate-gaps-btn" class="btn primary-btn"><i class="fa-solid fa-brain"></i> Analyze
+                            Research Gaps & Ideas</button>
                     </div>
                     <div class="card output-card">
                         <div class="card-header">
                             <h2>Identified Gaps & Novel Ideas</h2>
-                            <p>Contextualized limitations in existing papers combined with 3 novel research pathways proposed by Groq.</p>
+                            <p>Contextualized limitations in existing papers combined with 3 novel research pathways
+                                proposed by Groq.</p>
                         </div>
                         <div class="markdown-body" id="gaps-output">
                             <div class="empty-state">
                                 <i class="fa-solid fa-lightbulb"></i>
-                                <p>Click the button above to discover limitations, research gaps, and novel research ideas.</p>
+                                <p>Click the button above to discover limitations, research gaps, and novel research
+                                    ideas.</p>
                             </div>
                         </div>
                     </div>
@@ -140,11 +150,15 @@
                     <div class="card input-card">
                         <div class="card-header">
                             <h2>IEEE Research Paper Generator</h2>
-                            <p>Select a research idea title (or paste your own) to generate a fully formatted IEEE-style paper using Gemini.</p>
+                            <p>Select a research idea title (or paste your own) to generate a fully formatted IEEE-style
+                                paper using Gemini.</p>
                         </div>
                         <div class="paper-input-group">
-                            <input type="text" id="paper-topic" placeholder="e.g., Multimodal Stress Detection using Transformer Networks" class="form-input">
-                            <button id="generate-paper-btn" class="btn primary-btn"><i class="fa-solid fa-play"></i> Generate Full IEEE Paper</button>
+                            <input type="text" id="paper-topic"
+                                placeholder="e.g., Multimodal Stress Detection using Transformer Networks"
+                                class="form-input">
+                            <button id="generate-paper-btn" class="btn primary-btn"><i class="fa-solid fa-play"></i>
+                                Generate Full IEEE Paper</button>
                         </div>
                     </div>
 
@@ -152,9 +166,11 @@
                         <div class="card-header flex-header">
                             <div>
                                 <h2>Generated IEEE Research Paper</h2>
-                                <p>Structured sections: Abstract, Intro, Lit Survey, Methodology, Results, Conclusion & References.</p>
+                                <p>Structured sections: Abstract, Intro, Lit Survey, Methodology, Results, Conclusion &
+                                    References.</p>
                             </div>
-                            <button id="download-docx-btn" class="btn secondary-btn"><i class="fa-solid fa-file-word"></i> Download .docx</button>
+                            <button id="download-docx-btn" class="btn secondary-btn"><i
+                                    class="fa-solid fa-file-word"></i> Download .docx</button>
                         </div>
                         <div class="markdown-body" id="paper-output"></div>
                     </div>
@@ -165,7 +181,8 @@
                     <div class="gallery-container">
                         <div class="card-header">
                             <h2>Extracted Figures Gallery</h2>
-                            <p>Visual illustrations, graphs, and images extracted automatically from the uploaded PDFs.</p>
+                            <p>Visual illustrations, graphs, and images extracted automatically from the uploaded PDFs.
+                            </p>
                         </div>
                         <div class="figures-grid" id="figures-grid">
                             <div class="empty-state w-100">
@@ -196,13 +213,17 @@
                         <div class="chat-window" id="chat-window">
                             <div class="chat-message system">
                                 <div class="message-bubble">
-                                    Hello! Ask me any question related to the uploaded papers, and I will query the FAISS index to answer it.
+                                    Hello! Ask me any question related to the uploaded papers, and I will query the
+                                    FAISS index to answer it.
                                 </div>
                             </div>
                         </div>
                         <div class="chat-input-bar">
-                            <input type="text" id="chat-input" placeholder="e.g., What classification accuracy did the authors achieve?" class="form-input">
-                            <button id="chat-send-btn" class="btn primary-btn"><i class="fa-solid fa-paper-plane"></i></button>
+                            <input type="text" id="chat-input"
+                                placeholder="e.g., What classification accuracy did the authors achieve?"
+                                class="form-input">
+                            <button id="chat-send-btn" class="btn primary-btn"><i
+                                    class="fa-solid fa-paper-plane"></i></button>
                         </div>
                     </div>
                 </section>
@@ -221,4 +242,5 @@
     <!-- JS -->
     <script src="/static/main.js"></script>
 </body>
+
 </html>
