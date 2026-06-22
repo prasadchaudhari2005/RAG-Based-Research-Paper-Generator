@@ -58,10 +58,6 @@ metadata_store/
 *.jpg
 *.jpeg
 
-# ===============================
-# 📊 Streamlit Artifacts
-# ===============================
-.streamlit/
 
 # ===============================
 # 🧪 Test / Debug Artifacts
