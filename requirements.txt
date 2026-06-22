@@ -1,4 +1,3 @@
-streamlit
 groq
 google-generativeai
 pypdf
@@ -11,3 +10,5 @@ faiss-cpu
 sentence-transformers
 torch
 transformers
+flask
+flask-cors

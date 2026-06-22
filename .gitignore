@@ -45,6 +45,7 @@ app.log
 # ===============================
 data/
 uploads/
+metadata_store/
 *.pdf
 *.docx
 *.pptx

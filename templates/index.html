@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG Research Paper Generator</title>
+    <!-- Fonts & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- CSS -->
+    <link rel="stylesheet" href="/static/style.css">
+    <!-- Markdown Parser -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="logo-area">
+                <div class="logo-icon"><i class="fa-solid fa-graduation-cap"></i></div>
+                <span class="logo-text">RAG<span>PaperGen</span></span>
+            </div>
+            
+            <nav class="nav-menu">
+                <a href="#" class="nav-item active" data-tab="upload-tab">
+                    <i class="fa-solid fa-cloud-arrow-up"></i><span>Ingest Corpus</span>
+                </a>
+                <a href="#" class="nav-item" data-tab="review-tab">
+                    <i class="fa-solid fa-file-invoice"></i><span>Literature Review</span>
+                </a>
+                <a href="#" class="nav-item" data-tab="gaps-tab">
+                    <i class="fa-solid fa-lightbulb"></i><span>Gaps & Ideas</span>
+                </a>
+                <a href="#" class="nav-item" data-tab="paper-tab">
+                    <i class="fa-solid fa-pen-nib"></i><span>IEEE Paper</span>
+                </a>
+                <a href="#" class="nav-item" data-tab="figures-tab">
+                    <i class="fa-solid fa-images"></i><span>Figures Gallery</span>
+                </a>
+                <a href="#" class="nav-item" data-tab="intelligence-tab">
+                    <i class="fa-solid fa-brain"></i><span>Intelligence Dashboard</span>
+                </a>
+                <a href="#" class="nav-item" data-tab="ask-tab">
+                    <i class="fa-solid fa-comments"></i><span>Ask Papers</span>
+                </a>
+            </nav>
+
+            <div class="model-selector-container">
+                <label for="model-select"><i class="fa-solid fa-microchip"></i> Groq Model</label>
+                <select id="model-select">
+                    <option value="llama-3.3-70b-versatile">llama-3.3-70b (Fast)</option>
+                    <option value="mixtral-8x7b-32768">mixtral-8x7b</option>
+                </select>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <header class="app-header">
+                <h1 id="header-title">Ingest Corpus</h1>
+                <div class="status-badge" id="system-status">
+                    <span class="status-dot red"></span>
+                    <span class="status-text">No papers loaded</span>
+                </div>
+            </header>
+
+            <div class="content-wrapper">
+                <!-- INGEST TAB -->
+                <section id="upload-tab" class="tab-panel active">
+                    <div class="card upload-card">
+                        <div class="card-header">
+                            <h2>Upload IEEE Research Papers</h2>
+                            <p>Upload one or more PDFs to extract text, images and construct the RAG vector store.</p>
+                        </div>
+                        <div class="upload-zone" id="upload-zone">
+                            <i class="fa-solid fa-cloud-arrow-up upload-icon"></i>
+                            <h3>Drag & Drop PDFs here</h3>
+                            <p>or click to browse files</p>
+                            <input type="file" id="file-input" multiple accept=".pdf" style="display: none;">
+                        </div>
+                        
+                        <div class="file-list-container" id="file-list-container" style="display: none;">
+                            <h3>Selected Files</h3>
+                            <ul class="file-list" id="file-list"></ul>
+                            <button id="upload-btn" class="btn primary-btn"><i class="fa-solid fa-server"></i> Build RAG Index</button>
+                        </div>
+                    </div>
+
+                    <div class="card corpus-card" id="corpus-card" style="display: none;">
+                        <div class="card-header">
+                            <h2>Indexed Corpus</h2>
+                            <p>The following papers are currently part of the active session context:</p>
+                        </div>
+                        <ul class="indexed-list" id="indexed-list"></ul>
+                    </div>
+                </section>
+
+                <!-- REVIEW TAB -->
+                <section id="review-tab" class="tab-panel">
+                    <div class="action-bar">
+                        <button id="generate-review-btn" class="btn primary-btn"><i class="fa-solid fa-wand-magic-sparkles"></i> Generate Literature Review</button>
+                    </div>
+                    <div class="card output-card">
+                        <div class="card-header">
+                            <h2>Unified Literature Review</h2>
+                            <p>An abstractive summary covering problem statements, methodologies, datasets, and performance metrics across the entire corpus.</p>
+                        </div>
+                        <div class="markdown-body" id="review-output">
+                            <div class="empty-state">
+                                <i class="fa-solid fa-file-lines"></i>
+                                <p>Click the button above to generate a unified literature review using your indexed documents.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- GAPS TAB -->
+                <section id="gaps-tab" class="tab-panel">
+                    <div class="action-bar">
+                        <button id="generate-gaps-btn" class="btn primary-btn"><i class="fa-solid fa-brain"></i> Analyze Research Gaps & Ideas</button>
+                    </div>
+                    <div class="card output-card">
+                        <div class="card-header">
+                            <h2>Identified Gaps & Novel Ideas</h2>
+                            <p>Contextualized limitations in existing papers combined with 3 novel research pathways proposed by Groq.</p>
+                        </div>
+                        <div class="markdown-body" id="gaps-output">
+                            <div class="empty-state">
+                                <i class="fa-solid fa-lightbulb"></i>
+                                <p>Click the button above to discover limitations, research gaps, and novel research ideas.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- IEEE PAPER TAB -->
+                <section id="paper-tab" class="tab-panel">
+                    <div class="card input-card">
+                        <div class="card-header">
+                            <h2>IEEE Research Paper Generator</h2>
+                            <p>Select a research idea title (or paste your own) to generate a fully formatted IEEE-style paper using Gemini.</p>
+                        </div>
+                        <div class="paper-input-group">
+                            <input type="text" id="paper-topic" placeholder="e.g., Multimodal Stress Detection using Transformer Networks" class="form-input">
+                            <button id="generate-paper-btn" class="btn primary-btn"><i class="fa-solid fa-play"></i> Generate Full IEEE Paper</button>
+                        </div>
+                    </div>
+
+                    <div class="card output-card" id="paper-output-container" style="display: none;">
+                        <div class="card-header flex-header">
+                            <div>
+                                <h2>Generated IEEE Research Paper</h2>
+                                <p>Structured sections: Abstract, Intro, Lit Survey, Methodology, Results, Conclusion & References.</p>
+                            </div>
+                            <button id="download-docx-btn" class="btn secondary-btn"><i class="fa-solid fa-file-word"></i> Download .docx</button>
+                        </div>
+                        <div class="markdown-body" id="paper-output"></div>
+                    </div>
+                </section>
+
+                <!-- FIGURES TAB -->
+                <section id="figures-tab" class="tab-panel">
+                    <div class="gallery-container">
+                        <div class="card-header">
+                            <h2>Extracted Figures Gallery</h2>
+                            <p>Visual illustrations, graphs, and images extracted automatically from the uploaded PDFs.</p>
+                        </div>
+                        <div class="figures-grid" id="figures-grid">
+                            <div class="empty-state w-100">
+                                <i class="fa-solid fa-image"></i>
+                                <p>No figures extracted. Make sure you upload papers first.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- INTELLIGENCE TAB -->
+                <section id="intelligence-tab" class="tab-panel">
+                    <div class="card-header">
+                        <h2>Research Paper Intelligence Dashboard</h2>
+                        <p>Structured analysis and metadata extracted from the uploaded research paper corpus.</p>
+                    </div>
+                    <div id="metadata-dashboard-container" class="metadata-dashboard-grid">
+                        <div class="empty-state w-100">
+                            <i class="fa-solid fa-microchip"></i>
+                            <p>No paper intelligence data available. Upload and index research papers first.</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ASK TAB -->
+                <section id="ask-tab" class="tab-panel">
+                    <div class="ask-container">
+                        <div class="chat-window" id="chat-window">
+                            <div class="chat-message system">
+                                <div class="message-bubble">
+                                    Hello! Ask me any question related to the uploaded papers, and I will query the FAISS index to answer it.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="chat-input-bar">
+                            <input type="text" id="chat-input" placeholder="e.g., What classification accuracy did the authors achieve?" class="form-input">
+                            <button id="chat-send-btn" class="btn primary-btn"><i class="fa-solid fa-paper-plane"></i></button>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Spinner / Loading Overlay -->
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="spinner-box">
+            <div class="spinner"></div>
+            <p id="loading-text">Processing...</p>
+        </div>
+    </div>
+
+    <!-- JS -->
+    <script src="/static/main.js"></script>
+</body>
+</html>

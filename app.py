@@ -1,24 +1,24 @@
 import io
 import os
+import json
 import logging
-
-import streamlit as st
+import uuid
+from flask import Flask, request, jsonify, render_template, send_file, send_from_directory
+from flask_cors import CORS
 from groq import Groq
 import google.generativeai as genai
 from PIL import Image as PILImage
+from paper_intelligence import extract_paper_metadata
 
 # ------------------ ENV SETUP ------------------
 from dotenv import load_dotenv
 load_dotenv()
 
-try:
-    GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
-except Exception:
-    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-try:
-    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
-except Exception:
-    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+# Create metadata directory if not exists
+os.makedirs("metadata_store", exist_ok=True)
 
 # ------------------ RAG IMPORTS ------------------
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -41,12 +41,23 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+app = Flask(__name__, template_folder="templates", static_folder="static")
+CORS(app)
+
+# ------------------ GLOBAL STATE ------------------
+# For a local application, we can use simple global variables
+VECTORSTORE = None
+EXTRACTED_IMAGES = [] # List of dict: {"id": int, "label": str, "bytes": bytes}
+GENERATED_PAPER = None
+GENERATED_PAPER_TOPIC = None
+UPLOADED_FILENAMES = []
+
 # =========================================================
 # PDF HELPERS
 # =========================================================
 
-def extract_text_from_pdf(file_like):
-    file_like.seek(0)
+def extract_text_from_pdf(file_bytes):
+    file_like = io.BytesIO(file_bytes)
     reader = PdfReader(file_like)
     pages = []
     for p in reader.pages:
@@ -55,10 +66,10 @@ def extract_text_from_pdf(file_like):
             pages.append(t)
     return "\n\n".join(pages)
 
-def extract_images_from_pdf(file_like, min_width=300):
+def extract_images_from_pdf(file_bytes, min_width=300):
     images = []
     try:
-        file_like.seek(0)
+        file_like = io.BytesIO(file_bytes)
         reader = PdfReader(file_like)
         for i, page in enumerate(reader.pages):
             if not hasattr(page, "images"):
@@ -73,29 +84,29 @@ def extract_images_from_pdf(file_like, min_width=300):
                     buf = io.BytesIO()
                     pil.save(buf, format="PNG")
                     buf.seek(0)
-                    images.append((f"Page {i+1}", buf))
+                    images.append((f"Page {i+1}", buf.getvalue()))
                 except:
                     continue
-    except:
-        pass
+    except Exception as e:
+        logger.error(f"Image extraction error: {e}")
     return images
 
 # =========================================================
 # RAG CORE
 # =========================================================
 
-def build_vectorstore(uploaded_files):
+def build_vectorstore(files_data):
     docs = []
     splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=150)
 
-    for f in uploaded_files:
-        text = extract_text_from_pdf(f)
+    for filename, file_bytes in files_data:
+        text = extract_text_from_pdf(file_bytes)
         chunks = splitter.split_text(text)
         for c in chunks:
             docs.append(
                 Document(
                     page_content=c,
-                    metadata={"source": f.name}
+                    metadata={"source": filename}
                 )
             )
 
@@ -105,6 +116,8 @@ def build_vectorstore(uploaded_files):
     return FAISS.from_documents(docs, embeddings)
 
 def rag_retrieve(vectorstore, query, k=15):
+    if not vectorstore:
+        return ""
     docs = vectorstore.similarity_search(query, k=k)
     return "\n\n".join(d.page_content for d in docs)
 
@@ -184,7 +197,6 @@ VI. References (IEEE format, ONLY from context)
 
     return "\n\n".join([part1, part2, part3])
 
-
 # =========================================================
 # DOCX EXPORT
 # =========================================================
@@ -206,9 +218,10 @@ def create_docx_report(title, content, images=None):
     if images:
         doc.add_page_break()
         doc.add_heading("Appendix", level=1)
-        for lbl, img in images:
+        for lbl, img_bytes in images:
+            img_io = io.BytesIO(img_bytes)
             doc.add_paragraph(lbl)
-            doc.add_picture(img, width=Inches(5))
+            doc.add_picture(img_io, width=Inches(5))
 
     buf = io.BytesIO()
     doc.save(buf)
@@ -216,147 +229,292 @@ def create_docx_report(title, content, images=None):
     return buf
 
 # =========================================================
-# STREAMLIT APP
+# FLASK ROUTES
 # =========================================================
 
-def main():
-    st.set_page_config("RAG Research Paper Generator", layout="wide")
-    st.title("📚 RAG-Based Automated Literature Review & IEEE Paper Generator")
+@app.route("/")
+def index():
+    return render_template("index.html")
 
+@app.route("/api/status", methods=["GET"])
+def get_status():
+    return jsonify({
+        "indexed": VECTORSTORE is not None,
+        "files": UPLOADED_FILENAMES
+    })
+
+@app.route("/api/upload", methods=["POST"])
+def upload_files():
+    global VECTORSTORE, EXTRACTED_IMAGES, UPLOADED_FILENAMES
+    if "files" not in request.files:
+        return jsonify({"error": "No files uploaded"}), 400
+    
+    files = request.files.getlist("files")
+    if not files or files[0].filename == "":
+        return jsonify({"error": "No files selected"}), 400
+
+    files_data = []
+    new_filenames = []
+    new_images = []
+
+    for f in files:
+        if f.filename.endswith(".pdf"):
+            file_bytes = f.read()
+            files_data.append((f.filename, file_bytes))
+            new_filenames.append(f.filename)
+            
+            # 1. Extract text and generate metadata using paper_intelligence
+            try:
+                pdf_text = extract_text_from_pdf(file_bytes)
+                metadata = extract_paper_metadata(pdf_text)
+                metadata_path = os.path.join("metadata_store", f"{f.filename}.json")
+                with open(metadata_path, "w", encoding="utf-8") as meta_file:
+                    json.dump(metadata, meta_file, indent=2)
+                logger.info(f"Successfully saved intelligence metadata for {f.filename}")
+            except Exception as ex:
+                logger.error(f"Failed to generate intelligence metadata for {f.filename}: {ex}")
+
+            # 2. Extract images
+            extracted = extract_images_from_pdf(file_bytes)
+            for label, img_bytes in extracted:
+                new_images.append({
+                    "id": len(EXTRACTED_IMAGES) + len(new_images),
+                    "label": f"{f.filename} - {label}",
+                    "bytes": img_bytes
+                })
+
+    if not files_data:
+        return jsonify({"error": "No valid PDF files found"}), 400
+
+    try:
+        logger.info(f"Building RAG index for: {new_filenames}")
+        new_store = build_vectorstore(files_data)
+        if VECTORSTORE is None:
+            VECTORSTORE = new_store
+        else:
+            # Merge vectorstores
+            VECTORSTORE.merge_from(new_store)
+        
+        UPLOADED_FILENAMES.extend(new_filenames)
+        EXTRACTED_IMAGES.extend(new_images)
+        
+        return jsonify({
+            "success": True,
+            "message": "Papers indexed successfully",
+            "files": UPLOADED_FILENAMES,
+            "image_count": len(EXTRACTED_IMAGES)
+        })
+    except Exception as e:
+        logger.error(f"Error building index: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/metadata", methods=["GET"])
+def get_all_metadata():
+    os.makedirs("metadata_store", exist_ok=True)
+    meta_list = {}
+    for filename in os.listdir("metadata_store"):
+        if filename.endswith(".json"):
+            paper_name = filename[:-5]  # remove .json
+            try:
+                with open(os.path.join("metadata_store", filename), "r", encoding="utf-8") as f:
+                    meta_list[paper_name] = json.load(f)
+            except Exception as e:
+                logger.error(f"Error reading metadata file {filename}: {e}")
+    return jsonify(meta_list)
+
+@app.route("/api/metadata/<paper_name>", methods=["GET"])
+def get_paper_metadata(paper_name):
+    # handle both with or without .pdf
+    if paper_name.endswith(".pdf"):
+        filename = f"{paper_name}.json"
+    else:
+        filename = f"{paper_name}.pdf.json"
+        if not os.path.exists(os.path.join("metadata_store", filename)):
+            filename = f"{paper_name}.json"
+            
+    filepath = os.path.join("metadata_store", filename)
+    if not os.path.exists(filepath):
+        return jsonify({"error": "Metadata not found"}), 404
+        
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            return jsonify(json.load(f))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/review", methods=["POST"])
+def generate_review():
+    global VECTORSTORE
+    if not VECTORSTORE:
+        return jsonify({"error": "No papers uploaded yet"}), 400
+    
     if not GROQ_API_KEY:
-        st.error("GROQ_API_KEY missing in .env")
-        st.stop()
-
-    model_choice = st.sidebar.selectbox(
-        "Groq Model",
-        ["llama-3.3-70b-versatile", "mixtral-8x7b-32768"]
-    )
-
-    uploaded_files = st.file_uploader(
-        "Upload IEEE Research Papers (PDF)",
-        type=["pdf"],
-        accept_multiple_files=True
-    )
-
-    if uploaded_files and "vectorstore" not in st.session_state:
-        with st.spinner("Building RAG index..."):
-            st.session_state.vectorstore = build_vectorstore(uploaded_files)
-            st.success("Papers indexed successfully")
-
-    if "vectorstore" not in st.session_state:
-        st.info("Upload papers to begin")
-        return
-
-    client = Groq(api_key=GROQ_API_KEY)
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(
-        ["📑 Review", "💡 Gaps & Ideas", "📄 IEEE Paper", "📊 Figures", "🔍 Ask Papers"]
-    )
-
-    # ---------------- REVIEW ----------------
-    with tab1:
-        if st.button("Generate Literature Review"):
-            ctx = rag_retrieve(
-                st.session_state.vectorstore,
-                "Summarize problem statements, methods, datasets, and metrics used across all papers."
-            )
-            st.session_state.review = groq_generate(
-                client,
-                f"Generate a unified literature review:\n{ctx}",
-                model_choice
-            )
-        if "review" in st.session_state:
-            st.markdown(st.session_state.review)
-
-    # ---------------- GAPS & IDEAS ----------------
-    with tab2:
-        if st.button("Generate Research Gaps & Novel Ideas"):
-            ctx = rag_retrieve(
-                st.session_state.vectorstore,
-                "Identify limitations, future work, and unexplored research directions."
-            )
-            st.session_state.gaps = groq_generate(
-                client,
-                f"""
-From the following context:
-{ctx}
-
-Provide:
-1. Research gaps
-2. 3 Novel research ideas with titles and short descriptions
-""",
-                model_choice
-            )
-        if "gaps" in st.session_state:
-            st.markdown(st.session_state.gaps)
-
-    # ---------------- IEEE PAPER ----------------
-    with tab3:
-        st.subheader("📄 IEEE Research Paper Generator")
-
-        topic = st.text_input(
-            "Select / Paste Research Idea Title",
-            placeholder="e.g., Multimodal Stress Detection using Transformer Networks"
+        return jsonify({"error": "GROQ_API_KEY missing in environment"}), 500
+    
+    data = request.json or {}
+    model_choice = data.get("model", "llama-3.3-70b-versatile")
+    
+    try:
+        client = Groq(api_key=GROQ_API_KEY)
+        ctx = rag_retrieve(
+            VECTORSTORE,
+            "Summarize problem statements, methods, datasets, and metrics used across all papers."
         )
+        review = groq_generate(
+            client,
+            f"Generate a unified literature review:\n{ctx}",
+            model_choice
+        )
+        return jsonify({"review": review})
+    except Exception as e:
+        logger.error(f"Error generating review: {e}")
+        return jsonify({"error": str(e)}), 500
 
-        if st.button("🚀 Generate IEEE Paper"):
-            if not topic:
-                st.warning("Please enter a research topic.")
-            elif not GEMINI_API_KEY:
-                st.error("GEMINI_API_KEY missing in .env file.")
-            else:
-                with st.spinner("Gemini is generating the IEEE paper (this may take ~30 seconds)..."):
-                    try:
-                        literature_ctx = rag_retrieve(
-                            st.session_state.vectorstore,
-                            "Provide key literature insights relevant to the selected topic."
-                        )
+@app.route("/api/gaps", methods=["POST"])
+def generate_gaps():
+    global VECTORSTORE
+    if not VECTORSTORE:
+        return jsonify({"error": "No papers uploaded yet"}), 400
+    
+    if not GROQ_API_KEY:
+        return jsonify({"error": "GROQ_API_KEY missing in environment"}), 500
+    
+    data = request.json or {}
+    model_choice = data.get("model", "llama-3.3-70b-versatile")
+    
+    try:
+        client = Groq(api_key=GROQ_API_KEY)
+        ctx = rag_retrieve(
+            VECTORSTORE,
+            "Identify limitations, future work, and unexplored research directions."
+        )
+        gaps = groq_generate(
+            client,
+            f"From the following context:\n{ctx}\n\nProvide:\n1. Research gaps\n2. 3 Novel research ideas with titles and short descriptions",
+            model_choice
+        )
+        return jsonify({"gaps": gaps})
+    except Exception as e:
+        logger.error(f"Error generating gaps: {e}")
+        return jsonify({"error": str(e)}), 500
 
-                        references_ctx = rag_retrieve(
-                            st.session_state.vectorstore,
-                            "Extract references including authors, title, venue, and year."
-                        )
+@app.route("/api/generate-paper", methods=["POST"])
+def api_generate_paper():
+    global VECTORSTORE, GENERATED_PAPER, GENERATED_PAPER_TOPIC
+    if not VECTORSTORE:
+        return jsonify({"error": "No papers uploaded yet"}), 400
+    
+    if not GEMINI_API_KEY:
+        return jsonify({"error": "GEMINI_API_KEY missing in environment"}), 500
+    
+    data = request.json or {}
+    topic = data.get("topic")
+    if not topic:
+        return jsonify({"error": "Topic is required"}), 400
+    
+    try:
+        literature_ctx = rag_retrieve(
+            VECTORSTORE,
+            f"Provide key literature insights relevant to the selected topic: {topic}"
+        )
+        references_ctx = rag_retrieve(
+            VECTORSTORE,
+            "Extract references including authors, title, venue, and year."
+        )
+        
+        paper = generate_ieee_paper(topic, literature_ctx, references_ctx)
+        GENERATED_PAPER = paper
+        GENERATED_PAPER_TOPIC = topic
+        
+        return jsonify({"paper": paper})
+    except Exception as e:
+        logger.error(f"Error generating paper: {e}")
+        return jsonify({"error": str(e)}), 500
 
-                        paper = generate_ieee_paper(
-                            topic,
-                            literature_ctx,
-                            references_ctx
-                        )   
-                        st.session_state.paper = paper
-                        st.success("IEEE paper generated successfully!")
+@app.route("/api/ask", methods=["POST"])
+def api_ask():
+    global VECTORSTORE
+    if not VECTORSTORE:
+        return jsonify({"error": "No papers uploaded yet"}), 400
+    
+    if not GROQ_API_KEY:
+        return jsonify({"error": "GROQ_API_KEY missing in environment"}), 500
+    
+    data = request.json or {}
+    question = data.get("question")
+    model_choice = data.get("model", "llama-3.3-70b-versatile")
+    if not question:
+        return jsonify({"error": "Question is required"}), 400
+        
+    try:
+        client = Groq(api_key=GROQ_API_KEY)
+        ctx = rag_retrieve(VECTORSTORE, question)
+        ans = groq_generate(
+            client,
+            f"Based on the following context, answer the user's question:\nContext: {ctx}\n\nQuestion: {question}",
+            model_choice
+        )
+        return jsonify({"answer": ans})
+    except Exception as e:
+        logger.error(f"Error answering question: {e}")
+        return jsonify({"error": str(e)}), 500
 
-                    except Exception as e:
-                        st.error(f"IEEE paper generation failed: {e}")
+@app.route("/api/images", methods=["GET"])
+def get_images():
+    return jsonify([
+        {"id": img["id"], "label": img["label"]}
+        for img in EXTRACTED_IMAGES
+    ])
 
-        if "paper" in st.session_state:
-            with st.expander("📖 Preview IEEE Paper"):
-                st.markdown(st.session_state.paper)
-
-            docx = create_docx_report(
-                "IEEE Research Paper",
-                st.session_state.paper
+@app.route("/api/image/<int:img_id>", methods=["GET"])
+def serve_image(img_id):
+    for img in EXTRACTED_IMAGES:
+        if img["id"] == img_id:
+            return send_file(
+                io.BytesIO(img["bytes"]),
+                mimetype="image/png"
             )
+    return jsonify({"error": "Image not found"}), 404
 
-            st.download_button(
-                "📥 Download IEEE Paper (.docx)",
-                docx,
-                "IEEE_Paper.docx"
-            )
+@app.route("/api/download-docx", methods=["GET"])
+def download_docx():
+    global GENERATED_PAPER, GENERATED_PAPER_TOPIC
+    if not GENERATED_PAPER:
+        return jsonify({"error": "No paper has been generated yet"}), 400
+    
+    try:
+        # Prepare list of extracted images if we want to include them in the appendix
+        # For simplicity, we can pass all extracted images to the docx generator or none.
+        # Let's pass the images in memory
+        images_to_append = [(img["label"], img["bytes"]) for img in EXTRACTED_IMAGES]
+        
+        docx_buf = create_docx_report(
+            GENERATED_PAPER_TOPIC or "Generated IEEE Research Paper",
+            GENERATED_PAPER,
+            images=images_to_append
+        )
+        
+        filename = f"IEEE_Paper_{uuid.uuid4().hex[:8]}.docx"
+        return send_file(
+            docx_buf,
+            as_attachment=True,
+            download_name=filename,
+            mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+    except Exception as e:
+        logger.error(f"Error downloading docx: {e}")
+        return jsonify({"error": str(e)}), 500
 
-    # ---------------- FIGURES ----------------
-    with tab4:
-        imgs = []
-        for f in uploaded_files:
-            imgs.extend(extract_images_from_pdf(f))
-        for lbl, img in imgs:
-            st.image(img, caption=lbl, width=300)
-
-    # ---------------- ASK PAPERS ----------------
-    with tab5:
-        q = st.text_input("Ask a question across all papers")
-        if q:
-            ctx = rag_retrieve(st.session_state.vectorstore, q)
-            ans = groq_generate(client, ctx, model_choice)
-            st.markdown(ans)
+# =========================================================
+# MAIN
+# =========================================================
 
 if __name__ == "__main__":
-    main()
+    # Check for keys
+    if not GROQ_API_KEY:
+        logger.warning("GROQ_API_KEY missing in env")
+    if not GEMINI_API_KEY:
+        logger.warning("GEMINI_API_KEY missing in env")
+        
+    app.run(host="0.0.0.0", port=5000, debug=True)
